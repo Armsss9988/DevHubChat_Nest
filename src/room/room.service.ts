@@ -11,6 +11,7 @@ export class RoomService {
     const room = this.prisma.room.create({
       data: {
         name: createRoomDto.name,
+        description: createRoomDto.description
       },
     });
     return room;

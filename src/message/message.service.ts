@@ -7,12 +7,16 @@ import { Message } from '@prisma/client';
 export class MessageService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createMessageDto: CreateMessageDto): Promise<Message> {
-    return this.prisma.message.create({
-      data: {
-        content: createMessageDto.content,
-        roomId: createMessageDto.roomId,
-        userId: createMessageDto.userId,
+  async create(createMessageDto: CreateMessageDto) {
+    return await this.prisma.message.create({
+      data: createMessageDto,
+      include: {
+        user: {
+          select: {
+            username: true,
+            id: true,
+          },
+        },
       },
     });
   }
@@ -35,5 +39,5 @@ export class MessageService {
       where: { roomId },
       orderBy: { createdAt: 'desc' },
     });
-}
+  }
 }

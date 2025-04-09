@@ -4,6 +4,10 @@ export class CreateRoomDto {
   @ApiProperty()
   @IsString()
   name: string;
+
+  @ApiProperty()
+  @IsString()
+  description: string;
 }
 
   
