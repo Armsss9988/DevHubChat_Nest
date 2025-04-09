@@ -40,4 +40,28 @@ export class MessageService {
       orderBy: { createdAt: 'desc' },
     });
   }
+  async getChatHistory(roomId: string, lastMessageId?: string) {
+    const take = 20; // Number of messages to fetch per request
+
+    // If `lastMessageId` is provided, fetch messages older than the last message
+    const cursor = lastMessageId ? { id: lastMessageId } : undefined;
+
+    const messages = await this.prisma.message.findMany({
+      where: { roomId },
+      orderBy: { createdAt: 'desc' },
+      take,
+      skip: cursor ? 1 : 0, // Skip the cursor message if provided
+      cursor,
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    return messages.reverse(); // Reverse to show oldest messages first
+  }
 }

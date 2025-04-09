@@ -30,4 +30,5 @@ export class RoomService {
     if (!rooms) throw new NotFoundException('Users not found');
     return rooms;
   }
+
 }
