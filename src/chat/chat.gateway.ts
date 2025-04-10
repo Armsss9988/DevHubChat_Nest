@@ -21,7 +21,7 @@ interface ConnectedUser {
 
 @WebSocketGateway({
   cors: {
-    origin: 'http://localhost:3000',
+    origin: 'http://localhost:3000', // change to your frontend origin in production
     credentials: true,
   },
 })
@@ -31,63 +31,90 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(private readonly messageService: MessageService) {}
 
-  // Track users per room
+  // Map<roomId, Map<userId, ConnectedUser>>
   private roomUsers: Map<string, Map<string, ConnectedUser>> = new Map();
 
-  handleConnection(client: Socket) {
-    const { roomId, userId, username } = client.handshake.query as Record<
-      string,
-      string
-    >;
+  async handleConnection(client: Socket) {
+    const { userId, username } = client.handshake.query as Record<string, string>;
+
+    if (!userId || !username) {
+      console.error('⛔ Missing userId or username in handshake');
+      client.disconnect();
+      return;
+    }
+
+    console.log(`✅ Socket ${client.id} connected as ${username} (${userId})`);
+  }
+
+  handleDisconnect(client: Socket) {
+    const { userId } = client.handshake.query as Record<string, string>;
+    if (!userId) return;
+
+    // Find all rooms this user was in
+    for (const [roomId, users] of this.roomUsers.entries()) {
+      if (users.has(userId)) {
+        users.delete(userId);
+        client.leave(roomId);
+
+        if (users.size === 0) {
+          this.roomUsers.delete(roomId);
+        } else {
+          this.broadcastRoomUsers(roomId);
+        }
+
+        console.log(`❌ User ${userId} disconnected from room ${roomId}`);
+      }
+    }
+  }
+
+  @SubscribeMessage('join_room')
+  handleJoinRoom(client: Socket, payload: { roomId: string }) {
+    const { userId, username } = client.handshake.query as Record<string, string>;
+    const { roomId } = payload;
 
     if (!roomId || !userId || !username) {
-      client.disconnect();
-      console.error('Missing roomId, userId, or username');
+      console.warn('⚠️ Missing data to join room:', payload);
       return;
     }
 
     client.join(roomId);
-    console.log(`✅ Client ${client.id} joined room ${roomId} as ${username}`);
 
-    // Init map if not exists
-    if (!this.roomUsers[roomId]) {
-      this.roomUsers[roomId] = new Map<string, ConnectedUser>();
+    if (!this.roomUsers.has(roomId)) {
+      this.roomUsers.set(roomId, new Map());
     }
 
-    const usersInRoom = this.roomUsers[roomId];
+    const usersInRoom = this.roomUsers.get(roomId)!;
 
-    // Add user if not already added
     if (!usersInRoom.has(userId)) {
       usersInRoom.set(userId, { userId, username });
       this.broadcastRoomUsers(roomId);
     }
 
-    console.log(
-      `👥 Current users in ${roomId}:`,
-      Array.from(usersInRoom.values()),
-    );
+    console.log(`📥 User ${username} joined room ${roomId}`);
   }
 
-  handleDisconnect(client: Socket) {
-    const { roomId, userId } = client.handshake.query as Record<string, string>;
+  @SubscribeMessage('leave_room')
+  handleLeaveRoom(client: Socket, payload: { roomId: string }) {
+    const { userId } = client.handshake.query as Record<string, string>;
+    const { roomId } = payload;
 
-    if (!roomId || !userId) return;
-
-    const usersInRoom = this.roomUsers[roomId];
-    if (usersInRoom) {
+    const usersInRoom = this.roomUsers.get(roomId);
+    if (usersInRoom && userId) {
       usersInRoom.delete(userId);
+      client.leave(roomId);
+
       if (usersInRoom.size === 0) {
-        delete this.roomUsers[roomId];
+        this.roomUsers.delete(roomId);
       } else {
         this.broadcastRoomUsers(roomId);
       }
-    }
 
-    console.log(`❌ Client ${client.id} (user ${userId}) left room ${roomId}`);
+      console.log(`📤 User ${userId} left room ${roomId}`);
+    }
   }
 
   @SubscribeMessage('send_message')
-  async handleMessage(client: Socket, payload: MessagePayload) {
+  async handleSendMessage(client: Socket, payload: MessagePayload) {
     const { content, userId, roomId } = payload;
     if (!content || !userId || !roomId) {
       client.emit('error', { message: 'Invalid message payload' });
@@ -99,15 +126,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       userId,
       roomId,
     });
+
     this.server.to(roomId).emit('receive_message', message);
   }
 
   private broadcastRoomUsers(roomId: string) {
-    const users = Array.from(this.roomUsers[roomId]?.values() || []);
-    console.log('Onl User:', users);
+    const users = Array.from(this.roomUsers.get(roomId)?.values() || []);
     this.server.to(roomId).emit('room_users_updated', {
       roomId,
-      users,
+      users: users.map(({ userId, username }) => ({
+        id: userId,
+        username,
+      })),
       count: users.length,
     });
   }
