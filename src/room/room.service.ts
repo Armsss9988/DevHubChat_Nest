@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/src/prisma/prisma.service';
 import { CreateRoomDto } from './dto/create-room.dto';
-import { Room } from '@prisma/client';
+import { Room, Prisma } from '@prisma/client';
 
 @Injectable()
 export class RoomService {
@@ -11,7 +11,7 @@ export class RoomService {
     const room = this.prisma.room.create({
       data: {
         name: createRoomDto.name,
-        description: createRoomDto.description
+        description: createRoomDto.description,
       },
     });
     return room;
@@ -30,5 +30,28 @@ export class RoomService {
     if (!rooms) throw new NotFoundException('Users not found');
     return rooms;
   }
+  async filterRooms(
+    name?: string,
+    page: number = 1,
+    pageSize: number = 12,
+  ): Promise<{ rooms: Room[]; total: number }> {
+    const take = Number(pageSize);
+    const skip = (Number(page) - 1) * take;
 
+    const where: Prisma.RoomWhereInput = name
+      ? { name: { contains: name, mode: Prisma.QueryMode.insensitive } }
+      : {};
+
+    const [rooms, total] = await this.prisma.$transaction([
+      this.prisma.room.findMany({
+        where,
+        skip,
+        take: take,
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.room.count({ where }),
+    ]);
+
+    return { rooms, total };
+  }
 }

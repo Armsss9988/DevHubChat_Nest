@@ -38,4 +38,12 @@ export class RoomController {
   ) {
     return this.messageService.getChatHistory(roomId, lastMessageId);
   }
+  @Get('/filter')
+  async filterRooms(
+    @Query('name') name?: string,
+    @Query('page') page: number = 1,
+    @Query('pageSize') pageSize: number = 10,
+  ) {
+    return this.roomService.filterRooms(name, page, pageSize);
+  }
 }
