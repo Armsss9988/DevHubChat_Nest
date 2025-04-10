@@ -21,7 +21,7 @@ interface ConnectedUser {
 
 @WebSocketGateway({
   cors: {
-    origin: 'http://localhost:3000', // change to your frontend origin in production
+    origin: '#', 
     credentials: true,
   },
 })
@@ -35,7 +35,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private roomUsers: Map<string, Map<string, ConnectedUser>> = new Map();
 
   async handleConnection(client: Socket) {
-    const { userId, username } = client.handshake.query as Record<string, string>;
+    const { userId, username } = client.handshake.query as Record<
+      string,
+      string
+    >;
 
     if (!userId || !username) {
       console.error('⛔ Missing userId or username in handshake');
@@ -69,7 +72,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('join_room')
   handleJoinRoom(client: Socket, payload: { roomId: string }) {
-    const { userId, username } = client.handshake.query as Record<string, string>;
+    const { userId, username } = client.handshake.query as Record<
+      string,
+      string
+    >;
     const { roomId } = payload;
 
     if (!roomId || !userId || !username) {
