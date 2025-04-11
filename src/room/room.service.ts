@@ -30,6 +30,13 @@ export class RoomService {
     if (!rooms) throw new NotFoundException('Users not found');
     return rooms;
   }
+  async getRoomById(id: string): Promise<Room> {
+    const room = await this.prisma.room.findUnique({ where: { id } });
+    if (!room) {
+      throw new NotFoundException(`Room with ID ${id} not found`);
+    }
+    return room;
+  }
   async filterRooms(
     name?: string,
     page: number = 1,

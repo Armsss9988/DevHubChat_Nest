@@ -26,7 +26,10 @@ export class RoomController {
   remove(@Param('id') id: string) {
     return this.roomService.remove(id);
   }
-
+  @Get('/room/:id')
+  async getRoomById(@Param('id') id: string) {
+    return this.roomService.getRoomById(id);
+  }
   @Get()
   async findAll() {
     return this.roomService.findAll();
