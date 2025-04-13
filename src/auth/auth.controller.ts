@@ -60,8 +60,7 @@ export class AuthController {
       res.cookie('access_token', accessToken, {
         httpOnly: true,
         secure: true,
-        sameSite: 'lax',
-        path: '/',
+        sameSite: 'none',
         maxAge: 1000 * 60 * 15,
       });
       if (accessToken) {
