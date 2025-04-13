@@ -27,16 +27,70 @@ export class AuthController {
   @Post('register')
   @ApiOperation({ summary: 'Register user' })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  async register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    try {
+      console.log('Trying to refresh');
+      const { accessToken, refreshToken } =
+        await this.authService.register(dto);
+      res.cookie('refresh_token', refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7,
+      });
+      res.cookie('access_token', accessToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 1000 * 60 * 15,
+      });
+      if (!accessToken) {
+        res.status(403);
+      }
+      return res.status(201);
+    } catch {
+      res.status(403);
+    }
   }
 
   @Post('login')
   @ApiOperation({ summary: 'Login user' })
   @ApiResponse({ status: 200, description: 'User logged in with token' })
-  async login(@Body() dto: LoginDto) {
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const user = await this.authService.validateUser(dto.email, dto.password);
-    return await this.authService.login(user);
+
+    try {
+      console.log('Trying to refresh');
+      const { accessToken, refreshToken } = await this.authService.login(user);
+      res.cookie('refresh_token', refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7,
+      });
+      res.cookie('access_token', accessToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 1000 * 60 * 15,
+      });
+      if (!accessToken) {
+        res.status(403);
+      }
+      return res.status(201).json(user);
+    } catch {
+      res.status(403);
+    }
   }
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
@@ -57,6 +111,13 @@ export class AuthController {
       console.log('Trying to refresh');
       const { accessToken, refreshToken } =
         await this.authService.refreshToken(req);
+      res.cookie('refresh_token', refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7,
+      });
       res.cookie('access_token', accessToken, {
         httpOnly: true,
         secure: true,
@@ -64,9 +125,10 @@ export class AuthController {
         path: '/',
         maxAge: 1000 * 60 * 15,
       });
-      if (accessToken) {
+      if (!accessToken) {
         res.status(403);
       }
+      return res.status(201);
     } catch {
       res.status(403);
     }
