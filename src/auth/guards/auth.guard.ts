@@ -1,8 +1,10 @@
-import { Injectable } from '@nestjs/common';
-import { CanActivate, ExecutionContext } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { AuthService } from '../auth.service';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -10,15 +12,22 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const token = request.headers.authorization?.split(' ')[1];
-    if (!token) return false;
+
+    const token =
+      request.cookies['access_token'] ||
+      request.headers.authorization?.split(' ')[1];
+
+    if (!token) {      
+      throw new UnauthorizedException('Token không tồn tại');
+    }
 
     try {
       const user = await this.jwtService.verifyAsync(token);
       request.user = user;
       return true;
     } catch (e) {
-      return false;
+      console.log(`JWT Verify Error: ${e.message}`);
+      throw new UnauthorizedException('Token không hợp lệ hoặc hết hạn');
     }
   }
 }
