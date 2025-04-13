@@ -101,6 +101,33 @@ export class AuthController {
     console.log('user', req.user);
     return req.user;
   }
+  @Post('logout')
+  @ApiOperation({ summary: 'Login user' })
+  @ApiResponse({ status: 200, description: 'User logged in with token' })
+  async logout(@Res({ passthrough: true }) res: Response) {
+    try {
+      console.log('Trying to logout');
+      res.cookie('access_token', '', {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 0,
+      });
+
+      // Xóa cookie refresh_token
+      res.cookie('refresh_token', '', {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 0,
+      });
+      return res.status(201);
+    } catch {
+      res.status(403);
+    }
+  }
 
   @Post('refresh')
   async refresh(
