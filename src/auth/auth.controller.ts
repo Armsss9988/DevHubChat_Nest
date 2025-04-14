@@ -89,7 +89,7 @@ export class AuthController {
       }
       return res.status(201).json(user);
     } catch {
-      res.status(403);
+      res.status(403).json({ message: 'Lỗi đăng nhập' }); ;
     }
   }
   @ApiBearerAuth()
@@ -122,7 +122,7 @@ export class AuthController {
       });
       return res.json({ message: 'Ok bạn out r' });
     } catch {
-      res.status(403);
+      res.status(403).json({ message: 'OK' });
     }
   }
 
@@ -150,11 +150,11 @@ export class AuthController {
         maxAge: 1000 * 60 * 15,
       });
       if (!accessToken) {
-        res.status(403);
+        res.status(403).json({ message: 'Token bị xóa hoặc hết hạn' });
       }
       return res.json({ message: 'Ok bạn out r' });
     } catch {
-      res.status(403);
+      res.status(403).json({ message: 'Lỗi không rõ' });
     }
   }
 }
