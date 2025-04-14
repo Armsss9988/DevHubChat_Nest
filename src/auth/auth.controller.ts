@@ -37,15 +37,15 @@ export class AuthController {
         await this.authService.register(dto);
       res.cookie('refresh_token', refreshToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
         maxAge: 60 * 60 * 24 * 7,
       });
       res.cookie('access_token', accessToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
         maxAge: 1000 * 60 * 15,
       });
@@ -72,15 +72,15 @@ export class AuthController {
       const { accessToken, refreshToken } = await this.authService.login(user);
       res.cookie('refresh_token', refreshToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
         maxAge: 60 * 60 * 24 * 7,
       });
       res.cookie('access_token', accessToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
         maxAge: 1000 * 60 * 15,
       });
@@ -106,24 +106,21 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'User logged in with token' })
   async logout(@Res({ passthrough: true }) res: Response) {
     try {
-      console.log('Trying to logout');
       res.cookie('access_token', '', {
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
         maxAge: 0,
       });
-
-      // Xóa cookie refresh_token
       res.cookie('refresh_token', '', {
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
         maxAge: 0,
       });
-      return res.status(201);
+      return res.json({ message: 'Ok bạn out r' });
     } catch {
       res.status(403);
     }
@@ -140,22 +137,22 @@ export class AuthController {
         await this.authService.refreshToken(req);
       res.cookie('refresh_token', refreshToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
         maxAge: 60 * 60 * 24 * 7,
       });
       res.cookie('access_token', accessToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
         maxAge: 1000 * 60 * 15,
       });
       if (!accessToken) {
         res.status(403);
       }
-      return res.status(201);
+      return res.json({ message: 'Ok bạn out r' });
     } catch {
       res.status(403);
     }
