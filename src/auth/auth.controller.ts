@@ -50,11 +50,11 @@ export class AuthController {
         maxAge: 1000 * 60 * 15,
       });
       if (!accessToken) {
-        res.status(403);
+        res.status(403).json({ message: 'Đăng ký thất bại' });
       }
-      return res.status(201);
+      return res.status(201).json({ message: 'Đăng ký thành công' });
     } catch {
-      res.status(403);
+      res.status(403).json({ message: 'Đăng ký thất bại' });
     }
   }
 
@@ -85,11 +85,11 @@ export class AuthController {
         maxAge: 1000 * 60 * 15,
       });
       if (!accessToken) {
-        res.status(403);
+        res.status(403).json({ message: 'Không có token hoặc hết hạn' });
       }
       return res.status(201).json(user);
     } catch {
-      res.status(403).json({ message: 'Lỗi đăng nhập' }); ;
+      res.status(403).json({ message: 'Lỗi đăng nhập' });
     }
   }
   @ApiBearerAuth()
