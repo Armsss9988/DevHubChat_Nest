@@ -34,9 +34,11 @@ export class RoomController {
     const userId = req.user.id;
     return this.roomService.checkExistingJoin(userId, roomId);
   }
+  @UseGuards(AuthGuard)
   @Get('code/:code')
-  async findRoomByCode(@Param('code') code: string) {
-    return this.roomService.findByCode(code);
+  async findRoomByCode(@Request() req, @Param('code') code: string) {
+    const userId = req.user.id;
+    return this.roomService.findByCode(code, userId);
   }
 
   @UseGuards(AuthGuard)

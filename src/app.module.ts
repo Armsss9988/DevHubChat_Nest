@@ -8,6 +8,7 @@ import { RoomModule } from './room/room.module';
 import { MessageModule } from './message/message.module';
 import { ChatModule } from './chat/chat.module';
 import { ChatGateway } from './chat/chat.gateway';
+import { SubscribeModule } from './subscribe/subscribe.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ChatGateway } from './chat/chat.gateway';
     UserModule,
     RoomModule,
     MessageModule,
+    SubscribeModule,
   ],
   controllers: [AppController],
   providers: [AppService, ChatGateway],

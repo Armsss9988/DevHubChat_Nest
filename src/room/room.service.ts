@@ -84,7 +84,7 @@ export class RoomService {
     userId: string,
     role: Role,
     roomId: string,
-  ): Promise<Partial<Room>> {
+  ): Promise<Partial<Room> & { hasPassword?: boolean; isSub?: boolean }> {
     const room = await this.prisma.room.findUnique({
       where: { id: roomId },
       include: { creator: { select: { id: true, username: true } } },
@@ -101,8 +101,11 @@ export class RoomService {
     if (!hasJoined) {
       throw new ForbiddenException('Bạn không có quyền vào room');
     }
+    const isSub = !!(await this.prisma.userRoomJoin.findFirst({
+      where: { userId, roomId },
+    }));
     const { password, ...data } = room;
-    return data;
+    return { ...data, isSub };
   }
 
   async filterRooms(
@@ -112,7 +115,11 @@ export class RoomService {
     page: number = 1,
     pageSize: number = 12,
   ): Promise<{
-    rooms: Partial<Room & { isJoined: boolean; hasPassword: boolean }>[];
+    rooms: (Partial<Room> & {
+      subCount: number;
+      isSub?: boolean;
+      hasPassword?: boolean;
+    })[];
     total: number;
   }> {
     const take = Number(pageSize);
@@ -128,36 +135,51 @@ export class RoomService {
         skip,
         take,
         orderBy: { name: 'asc' },
-        include: { creator: { select: { id: true, username: true } } },
+        include: {
+          creator: { select: { id: true, username: true } },
+          _count: { select: { subscriptions: true } }, // đếm số sub
+        },
       }),
       this.prisma.room.count({ where }),
     ]);
 
+    // ✅ Nếu là ADMIN thì return nguyên rooms, gắn subCount
     if (role === Role.ADMIN) {
       return {
-        rooms: rooms.map((room) => ({ ...room })),
+        rooms: rooms.map(({ _count, ...room }) => ({
+          ...room,
+          subCount: _count.subscriptions,
+        })),
         total,
       };
     }
 
-    // Lấy danh sách roomId mà user đã join
+    // ✅ Nếu là USER, cần biết user đã subscribe phòng nào
+    const subscribed = await this.prisma.roomSubscription.findMany({
+      where: { userId },
+      select: { roomId: true },
+    });
+    const subscribedRoomIds = new Set(subscribed.map((s) => s.roomId));
     const joinedRooms = await this.prisma.userRoomJoin.findMany({
       where: { userId },
       select: { roomId: true },
     });
     const joinedRoomIds = new Set(joinedRooms.map((j) => j.roomId));
-
-    const filtered = rooms.map(({ password, ...room }) => ({
+    const mapped = rooms.map(({ password, _count, ...room }) => ({
       ...room,
+      subCount: _count.subscriptions,
       hasPassword: !!password,
       isJoined: joinedRoomIds.has(room.id),
+      isSub: subscribedRoomIds.has(room.id),
     }));
 
-    return { rooms: filtered, total };
+    return { rooms: mapped, total };
   }
+
   async findByCode(
     code: string,
-  ): Promise<Partial<Room> & { hasPassword: boolean }> {
+    userId: string,
+  ): Promise<Partial<Room> & { hasPassword: boolean; isJoined: boolean }> {
     const room = await this.prisma.room.findUnique({
       where: { roomCode: code },
     });
@@ -165,8 +187,17 @@ export class RoomService {
       throw new NotFoundException('Không tìm thấy phòng nào');
     }
     const { password, ...roomData } = room;
+    const joinedRooms = await this.prisma.userRoomJoin.findMany({
+      where: { userId },
+      select: { roomId: true },
+    });
+    const joinedRoomIds = new Set(joinedRooms.map((j) => j.roomId));
 
-    return { ...roomData, hasPassword: !!password };
+    return {
+      ...roomData,
+      hasPassword: !!password,
+      isJoined: joinedRoomIds.has(room.id),
+    };
   }
 
   async getUserHouse(userId: string): Promise<Room[]> {
