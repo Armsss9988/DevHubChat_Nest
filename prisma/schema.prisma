@@ -17,23 +17,35 @@ enum Role {
 
 // User Model
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  username  String   @unique
-  email     String   @unique
-  password  String
-  role      Role     @default(USER) 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  messages  Message[] 
+  id             String          @id @default(uuid()) @db.Uuid
+  username       String          @unique
+  email          String          @unique
+  password       String
+  role           Role            @default(USER)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  messages       Message[]       // Tin nhắn của user
+  subscriptions  RoomSubscription[] // Phòng user đã subscribe
+  createdRooms   Room[]          @relation("CreatedRooms") // Phòng user tạo (User House)
+  notifications  Notification[]  // Thông báo của user
+  roomJoins    UserRoomJoin[]  @relation("UserRoomJoins")
 }
 
 // Room Model
 model Room {
-  id        String    @id @default(uuid()) @db.Uuid
-  name      String
-  description String
-  messages  Message[] 
-  createdAt DateTime  @default(now())
+  id             String          @id @default(uuid()) @db.Uuid
+  name           String
+  description    String
+  roomCode       String          @unique
+  password       String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt // Thêm để theo dõi cập nhật
+  creatorId      String          @db.Uuid
+  creator        User            @relation("CreatedRooms", fields: [creatorId], references: [id])
+  messages       Message[]
+  subscriptions  RoomSubscription[]
+  notifications  Notification[]
+  roomJoins      UserRoomJoin[]  @relation("UserRoomJoins")
 }
 
 // Message Model
@@ -47,4 +59,42 @@ model Message {
   user      User     @relation(fields: [userId], references: [id])
   @@index([roomId])
   @@index([userId])
+}
+model UserRoomJoin {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  roomId    String   @db.Uuid
+  user      User     @relation("UserRoomJoins", fields: [userId], references: [id])
+  room      Room     @relation("UserRoomJoins", fields: [roomId], references: [id])
+  joinedAt  DateTime @default(now())
+  @@index([userId, roomId])
+}
+
+// RoomSubscription Model
+model RoomSubscription {
+  id            String   @id @default(uuid()) @db.Uuid
+  roomId        String   @db.Uuid
+  userId        String   @db.Uuid
+  subscribedAt  DateTime @default(now()) // Đổi tên từ createdAt
+  room          Room     @relation(fields: [roomId], references: [id])
+  user          User     @relation(fields: [userId], references: [id])
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@index([userId])
+}
+
+// Notification Model
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  roomId    String   @db.Uuid
+  type      String   // Đổi từ enum sang String để linh hoạt
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  expiresAt DateTime? // Thêm để xóa thông báo cũ
+  user      User     @relation(fields: [userId], references: [id])
+  room      Room     @relation(fields: [roomId], references: [id])
+  @@index([userId])
+  @@index([roomId])
 }

@@ -40,7 +40,7 @@ export class AuthController {
         secure: process.env.NODE_ENV === 'production',
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
-        maxAge: 60 * 60 * 24 * 7,
+        maxAge: 1000 * 60 * 60 * 24 * 7,
       });
       res.cookie('access_token', accessToken, {
         httpOnly: true,
@@ -75,7 +75,7 @@ export class AuthController {
         secure: process.env.NODE_ENV === 'production',
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
-        maxAge: 60 * 60 * 24 * 7,
+        maxAge: 1000 * 60 * 60 * 24 * 7,
       });
       res.cookie('access_token', accessToken, {
         httpOnly: true,
