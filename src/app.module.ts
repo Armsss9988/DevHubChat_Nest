@@ -6,9 +6,9 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UserModule } from './user/user.module';
 import { RoomModule } from './room/room.module';
 import { MessageModule } from './message/message.module';
-import { ChatModule } from './chat/chat.module';
 import { ChatGateway } from './chat/chat.gateway';
 import { SubscribeModule } from './subscribe/subscribe.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -18,6 +18,7 @@ import { SubscribeModule } from './subscribe/subscribe.module';
     RoomModule,
     MessageModule,
     SubscribeModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService, ChatGateway],

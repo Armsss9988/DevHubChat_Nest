@@ -143,7 +143,6 @@ export class RoomService {
       this.prisma.room.count({ where }),
     ]);
 
-    // ✅ Nếu là ADMIN thì return nguyên rooms, gắn subCount
     if (role === Role.ADMIN) {
       return {
         rooms: rooms.map(({ _count, ...room }) => ({
@@ -154,7 +153,6 @@ export class RoomService {
       };
     }
 
-    // ✅ Nếu là USER, cần biết user đã subscribe phòng nào
     const subscribed = await this.prisma.roomSubscription.findMany({
       where: { userId },
       select: { roomId: true },

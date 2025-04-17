@@ -7,6 +7,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { MessageService } from '../message/message.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface MessagePayload {
   content: string;
@@ -18,10 +19,22 @@ interface ConnectedUser {
   userId: string;
   username: string;
 }
+export type NotificationType = 'NEW_MESSAGE' | 'OTHER_TYPES_LATER';
+interface NotificationPayload {
+  type: NotificationType;
+  roomId: string;
+  roomName: string;
+  content: string;
+  fromUserId: string;
+  fromUsername: string;
+  createdAt: string;
+  messageId: string;
+  isRead: boolean;
+}
 
 @WebSocketGateway({
   cors: {
-    origin: '#', 
+    origin: '#',
     credentials: true,
   },
 })
@@ -29,7 +42,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly messageService: MessageService) {}
+  constructor(
+    private readonly messageService: MessageService,
+    private prisma: PrismaService,
+  ) {}
 
   // Map<roomId, Map<userId, ConnectedUser>>
   private roomUsers: Map<string, Map<string, ConnectedUser>> = new Map();
@@ -45,6 +61,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.disconnect();
       return;
     }
+    client.data.userId = userId;
+    client.data.username = username;
 
     console.log(`✅ Socket ${client.id} connected as ${username} (${userId})`);
   }
@@ -52,7 +70,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleDisconnect(client: Socket) {
     const { userId } = client.handshake.query as Record<string, string>;
     if (!userId) return;
-
     // Find all rooms this user was in
     for (const [roomId, users] of this.roomUsers.entries()) {
       if (users.has(userId)) {
@@ -121,19 +138,93 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('send_message')
   async handleSendMessage(client: Socket, payload: MessagePayload) {
-    const { content, userId, roomId } = payload;
-    if (!content || !userId || !roomId) {
-      client.emit('error', { message: 'Invalid message payload' });
-      return;
+    try {
+      const { content, userId, roomId } = payload;
+      console.log('📨 Received send_message payload:', payload);
+      if (!content || !userId || !roomId) {
+        client.emit('error', { message: '❌ Invalid message payload' });
+        console.error('❌ Missing fields in payload');
+        return;
+      }
+
+      // 1. Tạo message trong DB
+      const message = await this.prisma.message.create({
+        data: {
+          content,
+          userId,
+          roomId,
+        },
+        include: {
+          user: true,
+          room: true,
+        },
+      });
+
+      console.log('✅ Message saved to DB:', message);
+
+      // 2. Gửi message cho mọi người trong phòng
+      this.server.to(roomId).emit('receive_message', message);
+      console.log(`📡 Message broadcasted to room ${roomId}`);
+
+      // 3. Lấy danh sách người đăng ký phòng
+      const subscriptions = await this.prisma.roomSubscription.findMany({
+        where: { roomId },
+        include: { user: true },
+      });
+
+      console.log(`📥 Found ${subscriptions.length} room subscribers`);
+
+      // 4. Lưu thông báo vào DB
+      const notificationsData = subscriptions.map((sub) => ({
+        userId: sub.userId,
+        roomId,
+        type: 'NEW_MESSAGE',
+        messageId: message.id,
+      }));
+      console.log('📦 Subscriptions: ', subscriptions);
+      console.log('📨 Message Info: ', message);
+      console.log('🔌 Connected Socket: ', client.id, client.data?.userId);
+
+      await this.prisma.notification.createMany({ data: notificationsData });
+      console.log(`📝 Notifications saved for ${subscriptions.length} users`);
+
+      const connectedSockets = await this.server.fetchSockets();
+
+      for (const socket of connectedSockets) {
+        const socketUserId = socket.data?.userId;
+
+        const isSubscribed = subscriptions.find(
+          (sub) => sub.userId === socketUserId,
+        );
+        const usersInRoom = this.roomUsers.get(roomId)!;
+        const isHeInRoomAlready = usersInRoom.has(socketUserId);
+        if (isSubscribed && !isHeInRoomAlready) {
+          const notification = {
+            type: 'NEW_MESSAGE',
+            roomId: message.roomId,
+            roomName: message.room?.name || '',
+            content: message.content,
+            fromUserId: message.userId,
+            fromUsername: message.user?.username || '',
+            createdAt: message.createdAt.toISOString(),
+            messageId: message.id,
+            isRead: false,
+          };
+
+          console.log(
+            `🚀 Emitting notification to user ${socketUserId}:`,
+            notification,
+          );
+
+          socket.emit('notification', notification);
+        }
+      }
+    } catch (error) {
+      console.error('🔥 Error in handleSendMessage:', error);
+      client.emit('error', {
+        message: 'Server error while sending message',
+      });
     }
-
-    const message = await this.messageService.create({
-      content,
-      userId,
-      roomId,
-    });
-
-    this.server.to(roomId).emit('receive_message', message);
   }
 
   private broadcastRoomUsers(roomId: string) {
