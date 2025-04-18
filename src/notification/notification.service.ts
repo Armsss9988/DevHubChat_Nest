@@ -30,8 +30,27 @@ export class NotificationService {
           select: {
             id: true,
             content: true,
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
           },
         },
+      },
+    });
+  }
+  async markRoomAsRead(userId: string, roomId: string) {
+    console.log(userId, roomId);
+    return this.prisma.notification.updateMany({
+      where: {
+        userId,
+        roomId,
+        isRead: false,
+      },
+      data: {
+        isRead: true,
       },
     });
   }

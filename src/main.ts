@@ -3,6 +3,7 @@ import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { IoAdapter } from '@nestjs/platform-socket.io';
+import { PrismaClientExceptionFilter } from './util/prisma-exception.filter';
 async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('DevHub API')
@@ -12,6 +13,7 @@ async function bootstrap() {
     .build();
 
   const app = await NestFactory.create(AppModule);
+  app.useGlobalFilters(new PrismaClientExceptionFilter());
   app.use(cookieParser());
   app.enableCors({
     origin: process.env.CLIENT_URL,

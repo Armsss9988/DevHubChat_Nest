@@ -31,31 +31,35 @@ export class AuthController {
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    try {
-      console.log('Trying to refresh');
-      const { accessToken, refreshToken } =
-        await this.authService.register(dto);
-      res.cookie('refresh_token', refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        path: '/',
-        maxAge: 1000 * 60 * 60 * 24 * 7,
-      });
-      res.cookie('access_token', accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        path: '/',
-        maxAge: 1000 * 60 * 15,
-      });
-      if (!accessToken) {
-        res.status(403).json({ message: 'Đăng ký thất bại' });
-      }
-      return res.status(201).json({ message: 'Đăng ký thành công' });
-    } catch {
+    // try {
+    const { accessToken, refreshToken, user } =
+      await this.authService.register(dto);
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    });
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+      maxAge: 1000 * 60 * 15,
+    });
+    if (!accessToken) {
       res.status(403).json({ message: 'Đăng ký thất bại' });
     }
+    return res.status(201).json({ message: 'Đăng ký thành công', user });
+    // } catch (err) {
+    //   if (err.code === 'P2002') {
+    //     return res.status(409).json({
+    //       error: 'Tên phòng đã tồn tại.',
+    //       detail: err.meta,
+    //     });
+    //   }
+    // }
   }
 
   @Post('login')
@@ -127,10 +131,7 @@ export class AuthController {
   }
 
   @Post('refresh')
-  async refresh(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async refresh(@Req() req: Request, @Res() res: Response) {
     try {
       console.log('Trying to refresh');
       const { accessToken, refreshToken } =
@@ -154,7 +155,7 @@ export class AuthController {
       }
       return res.json({ message: 'Ok bạn out r' });
     } catch {
-      res.status(403).json({ message: 'Lỗi không rõ' });
+      res.status(500).json({ message: 'Lỗi không rõ' });
     }
   }
 }

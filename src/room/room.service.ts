@@ -42,9 +42,19 @@ export class RoomService {
   }
 
   async checkExistingJoin(userId: string, roomId: string) {
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      select: { password: true },
+    });
+
+    if (!room) throw new Error('Room not found');
+    if (!room.password) {
+      return true;
+    }
     const existingJoin = await this.prisma.userRoomJoin.findFirst({
       where: { userId, roomId },
     });
+
     if (existingJoin) return true;
     return false;
   }
@@ -98,7 +108,7 @@ export class RoomService {
     const hasJoined = await this.prisma.userRoomJoin.findFirst({
       where: { userId, roomId },
     });
-    if (!hasJoined) {
+    if (!hasJoined && room.password) {
       throw new ForbiddenException('Bạn không có quyền vào room');
     }
     const isSub = !!(await this.prisma.userRoomJoin.findFirst({
@@ -114,11 +124,15 @@ export class RoomService {
     name?: string,
     page: number = 1,
     pageSize: number = 12,
+    isSub?: boolean,
+    owner?: boolean,
   ): Promise<{
     rooms: (Partial<Room> & {
       subCount: number;
       isSub?: boolean;
       hasPassword?: boolean;
+      isJoined?: boolean;
+      unreadCount: number;
     })[];
     total: number;
   }> {
@@ -129,6 +143,10 @@ export class RoomService {
       ? { name: { contains: name, mode: Prisma.QueryMode.insensitive } }
       : {};
 
+    if (role !== Role.ADMIN && owner) {
+      where.creatorId = userId;
+    }
+
     const [rooms, total] = await this.prisma.$transaction([
       this.prisma.room.findMany({
         where,
@@ -137,7 +155,7 @@ export class RoomService {
         orderBy: { name: 'asc' },
         include: {
           creator: { select: { id: true, username: true } },
-          _count: { select: { subscriptions: true } }, // đếm số sub
+          _count: { select: { subscriptions: true } },
         },
       }),
       this.prisma.room.count({ where }),
@@ -148,30 +166,71 @@ export class RoomService {
         rooms: rooms.map(({ _count, ...room }) => ({
           ...room,
           subCount: _count.subscriptions,
+          unreadCount: 0, // Admin không cần unread
         })),
         total,
       };
     }
 
-    const subscribed = await this.prisma.roomSubscription.findMany({
-      where: { userId },
-      select: { roomId: true },
-    });
-    const subscribedRoomIds = new Set(subscribed.map((s) => s.roomId));
-    const joinedRooms = await this.prisma.userRoomJoin.findMany({
-      where: { userId },
-      select: { roomId: true },
-    });
-    const joinedRoomIds = new Set(joinedRooms.map((j) => j.roomId));
-    const mapped = rooms.map(({ password, _count, ...room }) => ({
-      ...room,
-      subCount: _count.subscriptions,
-      hasPassword: !!password,
-      isJoined: joinedRoomIds.has(room.id),
-      isSub: subscribedRoomIds.has(room.id),
-    }));
+    // Lay tat ca ID cua rooms hien tai
+    const currentRoomIds = rooms.map((r) => r.id);
 
-    return { rooms: mapped, total };
+    const [subscriptions, joinedRooms, rawUnreadGrouped] =
+      await this.prisma.$transaction([
+        this.prisma.roomSubscription.findMany({
+          where: { userId, roomId: { in: currentRoomIds } },
+          select: { roomId: true },
+        }),
+        this.prisma.userRoomJoin.findMany({
+          where: { userId, roomId: { in: currentRoomIds } },
+          select: { roomId: true },
+        }),
+        this.prisma.notification.groupBy({
+          by: ['roomId'],
+          where: {
+            userId,
+            roomId: { in: currentRoomIds },
+            isRead: false,
+          },
+          orderBy: {
+            roomId: 'asc',
+          },
+          _count: { id: true },
+        }),
+      ]);
+    const unreadGrouped = rawUnreadGrouped as {
+      roomId: string;
+      _count: { id: number };
+    }[];
+    const subscribedRoomIds = new Set(subscriptions.map((s) => s.roomId));
+    const joinedRoomIds = new Set(joinedRooms.map((j) => j.roomId));
+    const unreadMap = new Map(
+      unreadGrouped.map((g) => [g.roomId, g._count?.id ?? 0]),
+    );
+
+    const mapped = rooms
+      .map(({ password, _count, ...room }) => {
+        const isSubscribed = subscribedRoomIds.has(room.id);
+        const isJoined = joinedRoomIds.has(room.id);
+        const unreadCount = unreadMap.get(room.id) || 0;
+        return {
+          ...room,
+          subCount: _count.subscriptions,
+          hasPassword: !!password,
+          isJoined,
+          isSub: isSubscribed,
+          unreadCount,
+        };
+      })
+      .filter((room) => {
+        if (isSub === true && !room.isSub) return false;
+        return true;
+      });
+
+    return {
+      rooms: mapped,
+      total: mapped.length,
+    };
   }
 
   async findByCode(
@@ -214,4 +273,87 @@ export class RoomService {
     } while (existingRoom);
     return roomCode;
   }
+
+  // async getSubscribedRooms(userId: string) {
+  //   const rooms = await this.prisma.room.findMany({
+  //     where: {
+  //       subscriptions: {
+  //         some: {
+  //           userId,
+  //         },
+  //       },
+  //     },
+  //     include: {
+  //       creator: true,
+  //     },
+  //   });
+
+  //   const unreadCounts = await this.prisma.notification.groupBy({
+  //     by: ['roomId'],
+  //     where: {
+  //       userId,
+  //       isRead: false,
+  //     },
+  //     _count: {
+  //       id: true,
+  //     },
+  //   });
+  //   const joinedRooms = await this.prisma.userRoomJoin.findMany({
+  //     where: { userId },
+  //     select: { roomId: true },
+  //   });
+  //   const joinedRoomIds = new Set(joinedRooms.map((j) => j.roomId));
+  //   const result = rooms.map((room) => {
+  //     const countObj = unreadCounts.find((c) => c.roomId === room.id);
+  //     return {
+  //       ...room,
+  //       unreadCount: countObj?._count.id || 0,
+  //       isJoined: joinedRoomIds.has(room.id),
+  //     };
+  //   });
+
+  //   return result;
+  // }
+
+  // async getMyRooms(userId: string) {
+  //   const rooms = await this.prisma.room.findMany({
+  //     where: {
+  //       creatorId: userId,
+  //     },
+  //     include: {
+  //       _count: {
+  //         select: {
+  //           messages: true,
+  //           subscriptions: true,
+  //         },
+  //       },
+  //     },
+  //   });
+  //   const unreadCounts = await this.prisma.notification.groupBy({
+  //     by: ['roomId'],
+  //     where: {
+  //       userId,
+  //       isRead: false,
+  //     },
+  //     _count: {
+  //       id: true,
+  //     },
+  //   });
+
+  //   const joinedRooms = await this.prisma.userRoomJoin.findMany({
+  //     where: { userId },
+  //     select: { roomId: true },
+  //   });
+  //   const joinedRoomIds = new Set(joinedRooms.map((j) => j.roomId));
+  //   const result = rooms.map((room) => {
+  //     const countObj = unreadCounts.find((c) => c.roomId === room.id);
+  //     return {
+  //       ...room,
+  //       unreadCount: countObj?._count.id || 0,
+  //       isJoined: joinedRoomIds.has(room.id),
+  //     };
+  //   });
+
+  //   return result;
+  // }
 }

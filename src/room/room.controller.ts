@@ -27,6 +27,19 @@ export class RoomController {
     const userId = req.user.id;
     return this.roomService.create(userId, createRoomDto);
   }
+  // @UseGuards(AuthGuard)
+  // @Get('subscribed')
+  // async getSubscribed(@Request() req) {
+  //   const userId = req.user['id'];
+  //   return this.roomService.getSubscribedRooms(userId);
+  // }
+
+  // @UseGuards(AuthGuard)
+  // @Get('my')
+  // async getMyRooms(@Request() req) {
+  //   const userId = req.user['id'];
+  //   return this.roomService.getMyRooms(userId);
+  // }
 
   @UseGuards(AuthGuard)
   @Post('check')
@@ -59,6 +72,7 @@ export class RoomController {
     const { id: userId, role } = req.user;
     return this.roomService.remove(userId, role, roomId);
   }
+
   @UseGuards(AuthGuard)
   @Get('filter')
   async filterRooms(
@@ -66,9 +80,19 @@ export class RoomController {
     @Query('name') name?: string,
     @Query('page') page: number = 1,
     @Query('pageSize') pageSize: number = 10,
+    @Query('isSub') isSub?: string, // get as string → convert later
+    @Query('owner') owner?: string,
   ) {
     const { id, role } = req.user;
-    return this.roomService.filterRooms(id, role, name, page, pageSize);
+    return this.roomService.filterRooms(
+      id,
+      role,
+      name,
+      page,
+      pageSize,
+      isSub === 'true',
+      owner === 'true',
+    );
   }
 
   @UseGuards(AuthGuard)
