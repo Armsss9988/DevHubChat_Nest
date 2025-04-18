@@ -198,7 +198,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         );
         const usersInRoom = this.roomUsers.get(roomId)!;
         const isHeInRoomAlready = usersInRoom.has(socketUserId);
-        if (isSubscribed && !isHeInRoomAlready) {
+        if (isSubscribed && !isHeInRoomAlready && socketUserId !== userId) {
           const notification = {
             type: 'NEW_MESSAGE',
             roomId: message.roomId,
