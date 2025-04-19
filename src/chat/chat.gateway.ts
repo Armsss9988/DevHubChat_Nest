@@ -146,7 +146,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         console.error('❌ Missing fields in payload');
         return;
       }
-
+  
       // 1. Tạo message trong DB
       const message = await this.prisma.message.create({
         data: {
@@ -159,47 +159,43 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           room: true,
         },
       });
-
+  
       console.log('✅ Message saved to DB:', message);
-
+  
       // 2. Gửi message cho mọi người trong phòng
       this.server.to(roomId).emit('receive_message', message);
       console.log(`📡 Message broadcasted to room ${roomId}`);
-
+  
       // 3. Lấy danh sách người đăng ký phòng
       const subscriptions = await this.prisma.roomSubscription.findMany({
         where: { roomId },
         include: { user: true },
       });
-
-      console.log(`📥 Found ${subscriptions.length} room subscribers`);
-
-      // 4. Lưu thông báo vào DB
-      const notificationsData = subscriptions.map((sub) => ({
-        userId: sub.userId,
-        roomId,
-        type: 'NEW_MESSAGE',
-        messageId: message.id,
-      }));
-      console.log('📦 Subscriptions: ', subscriptions);
-      console.log('📨 Message Info: ', message);
-      console.log('🔌 Connected Socket: ', client.id, client.data?.userId);
-
-      await this.prisma.notification.createMany({ data: notificationsData });
-      console.log(`📝 Notifications saved for ${subscriptions.length} users`);
-
+  
       const connectedSockets = await this.server.fetchSockets();
-
+      const usersInRoom = this.roomUsers.get(roomId) ?? new Map();
+  
+      // 4. Tạo danh sách notification cần tạo vào DB
+      const notificationsToCreate: { userId: string; roomId: string; type: NotificationType; messageId: string }[] = [];
+  
       for (const socket of connectedSockets) {
         const socketUserId = socket.data?.userId;
-
-        const isSubscribed = subscriptions.find(
-          (sub) => sub.userId === socketUserId,
-        );
-        const usersInRoom = this.roomUsers.get(roomId)!;
+        if (!socketUserId || socketUserId === userId) continue;
+  
+        const isSubscribed = subscriptions.find((sub) => sub.userId === socketUserId);
         const isHeInRoomAlready = usersInRoom.has(socketUserId);
-        if (isSubscribed && !isHeInRoomAlready && socketUserId !== userId) {
-          const notification = {
+  
+        if (isSubscribed && !isHeInRoomAlready) {
+          // Push vào danh sách để tạo notification vào DB
+          notificationsToCreate.push({
+            userId: socketUserId,
+            roomId,
+            type: 'NEW_MESSAGE',
+            messageId: message.id,
+          });
+  
+          // Emit real-time notification
+          const notification: NotificationPayload = {
             type: 'NEW_MESSAGE',
             roomId: message.roomId,
             roomName: message.room?.name || '',
@@ -210,14 +206,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             messageId: message.id,
             isRead: false,
           };
-
-          console.log(
-            `🚀 Emitting notification to user ${socketUserId}:`,
-            notification,
-          );
-
+  
+          console.log(`🚀 Emitting notification to user ${socketUserId}:`, notification);
           socket.emit('notification', notification);
         }
+      }
+  
+      if (notificationsToCreate.length > 0) {
+        await this.prisma.notification.createMany({
+          data: notificationsToCreate,
+        });
+        console.log(`📝 Notifications saved for ${notificationsToCreate.length} users`);
       }
     } catch (error) {
       console.error('🔥 Error in handleSendMessage:', error);
@@ -226,6 +225,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
     }
   }
+  
 
   private broadcastRoomUsers(roomId: string) {
     const users = Array.from(this.roomUsers.get(roomId)?.values() || []);

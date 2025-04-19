@@ -80,7 +80,7 @@ export class RoomController {
     @Query('name') name?: string,
     @Query('page') page: number = 1,
     @Query('pageSize') pageSize: number = 10,
-    @Query('isSub') isSub?: string, // get as string → convert later
+    @Query('isSub') isSub?: string, 
     @Query('owner') owner?: string,
   ) {
     const { id, role } = req.user;

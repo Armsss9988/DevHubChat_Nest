@@ -166,13 +166,12 @@ export class RoomService {
         rooms: rooms.map(({ _count, ...room }) => ({
           ...room,
           subCount: _count.subscriptions,
-          unreadCount: 0, // Admin không cần unread
+          unreadCount: 0,
         })),
         total,
       };
     }
 
-    // Lay tat ca ID cua rooms hien tai
     const currentRoomIds = rooms.map((r) => r.id);
 
     const [subscriptions, joinedRooms, rawUnreadGrouped] =
