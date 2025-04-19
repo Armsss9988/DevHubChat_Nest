@@ -19,7 +19,9 @@ interface ConnectedUser {
   userId: string;
   username: string;
 }
+
 export type NotificationType = 'NEW_MESSAGE' | 'OTHER_TYPES_LATER';
+
 interface NotificationPayload {
   type: NotificationType;
   roomId: string;
@@ -34,82 +36,60 @@ interface NotificationPayload {
 
 @WebSocketGateway({
   cors: {
-    origin: '#',
+    origin: '*', // Allow all origins for dev; use specific domains in production
     credentials: true,
   },
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer()
-  server: Server;
+  @WebSocketServer() server: Server;
+
+  private readonly roomUsers = new Map<string, Map<string, ConnectedUser>>();
 
   constructor(
     private readonly messageService: MessageService,
-    private prisma: PrismaService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  // Map<roomId, Map<userId, ConnectedUser>>
-  private roomUsers: Map<string, Map<string, ConnectedUser>> = new Map();
-
   async handleConnection(client: Socket) {
-    const { userId, username } = client.handshake.query as Record<
-      string,
-      string
-    >;
+    const { userId, username } = client.handshake.query as Record<string, string>;
 
     if (!userId || !username) {
       console.error('⛔ Missing userId or username in handshake');
-      client.disconnect();
-      return;
+      return client.disconnect();
     }
-    client.data.userId = userId;
-    client.data.username = username;
 
+    client.data = { userId, username };
     console.log(`✅ Socket ${client.id} connected as ${username} (${userId})`);
   }
 
   handleDisconnect(client: Socket) {
-    const { userId } = client.handshake.query as Record<string, string>;
+    const { userId } = client.data;
     if (!userId) return;
-    // Find all rooms this user was in
+
     for (const [roomId, users] of this.roomUsers.entries()) {
-      if (users.has(userId)) {
-        users.delete(userId);
+      if (users.delete(userId)) {
         client.leave(roomId);
-
-        if (users.size === 0) {
-          this.roomUsers.delete(roomId);
-        } else {
-          this.broadcastRoomUsers(roomId);
-        }
-
+        users.size ? this.broadcastRoomUsers(roomId) : this.roomUsers.delete(roomId);
         console.log(`❌ User ${userId} disconnected from room ${roomId}`);
       }
     }
   }
 
   @SubscribeMessage('join_room')
-  handleJoinRoom(client: Socket, payload: { roomId: string }) {
-    const { userId, username } = client.handshake.query as Record<
-      string,
-      string
-    >;
-    const { roomId } = payload;
+  handleJoinRoom(client: Socket, { roomId }: { roomId: string }) {
+    const { userId, username } = client.data;
 
     if (!roomId || !userId || !username) {
-      console.warn('⚠️ Missing data to join room:', payload);
+      console.warn('⚠️ Missing data to join room:', { roomId, userId, username });
       return;
     }
 
     client.join(roomId);
-
-    if (!this.roomUsers.has(roomId)) {
-      this.roomUsers.set(roomId, new Map());
-    }
-
-    const usersInRoom = this.roomUsers.get(roomId)!;
+    const usersInRoom = this.roomUsers.get(roomId) ?? new Map();
 
     if (!usersInRoom.has(userId)) {
       usersInRoom.set(userId, { userId, username });
+      this.roomUsers.set(roomId, usersInRoom);
       this.broadcastRoomUsers(roomId);
     }
 
@@ -117,21 +97,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('leave_room')
-  handleLeaveRoom(client: Socket, payload: { roomId: string }) {
-    const { userId } = client.handshake.query as Record<string, string>;
-    const { roomId } = payload;
+  handleLeaveRoom(client: Socket, { roomId }: { roomId: string }) {
+    const { userId } = client.data;
 
     const usersInRoom = this.roomUsers.get(roomId);
-    if (usersInRoom && userId) {
-      usersInRoom.delete(userId);
+    if (usersInRoom?.delete(userId)) {
       client.leave(roomId);
-
-      if (usersInRoom.size === 0) {
-        this.roomUsers.delete(roomId);
-      } else {
-        this.broadcastRoomUsers(roomId);
-      }
-
+      usersInRoom.size ? this.broadcastRoomUsers(roomId) : this.roomUsers.delete(roomId);
       console.log(`📤 User ${userId} left room ${roomId}`);
     }
   }
@@ -140,64 +112,41 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleSendMessage(client: Socket, payload: MessagePayload) {
     try {
       const { content, userId, roomId } = payload;
-      console.log('📨 Received send_message payload:', payload);
+
       if (!content || !userId || !roomId) {
-        client.emit('error', { message: '❌ Invalid message payload' });
-        console.error('❌ Missing fields in payload');
-        return;
+        console.error('❌ Invalid message payload', payload);
+        return client.emit('error', { message: 'Invalid message payload' });
       }
-  
-      // 1. Tạo message trong DB
+
       const message = await this.prisma.message.create({
-        data: {
-          content,
-          userId,
-          roomId,
-        },
-        include: {
-          user: true,
-          room: true,
-        },
+        data: { content, userId, roomId },
+        include: { user: true, room: true },
       });
-  
-      console.log('✅ Message saved to DB:', message);
-  
-      // 2. Gửi message cho mọi người trong phòng
+
       this.server.to(roomId).emit('receive_message', message);
       console.log(`📡 Message broadcasted to room ${roomId}`);
-  
-      // 3. Lấy danh sách người đăng ký phòng
-      const subscriptions = await this.prisma.roomSubscription.findMany({
-        where: { roomId },
-        include: { user: true },
-      });
-  
-      const connectedSockets = await this.server.fetchSockets();
+
+      const [subscriptions, sockets] = await Promise.all([
+        this.prisma.roomSubscription.findMany({
+          where: { roomId },
+          select: { userId: true },
+        }),
+        this.server.fetchSockets(),
+      ]);
+
       const usersInRoom = this.roomUsers.get(roomId) ?? new Map();
-  
-      // 4. Tạo danh sách notification cần tạo vào DB
-      const notificationsToCreate: { userId: string; roomId: string; type: NotificationType; messageId: string }[] = [];
-  
-      for (const socket of connectedSockets) {
+      const notificationData = sockets.flatMap((socket) => {
         const socketUserId = socket.data?.userId;
-        if (!socketUserId || socketUserId === userId) continue;
-  
-        const isSubscribed = subscriptions.find((sub) => sub.userId === socketUserId);
-        const isHeInRoomAlready = usersInRoom.has(socketUserId);
-  
-        if (isSubscribed && !isHeInRoomAlready) {
-          // Push vào danh sách để tạo notification vào DB
-          notificationsToCreate.push({
-            userId: socketUserId,
-            roomId,
-            type: 'NEW_MESSAGE',
-            messageId: message.id,
-          });
-  
-          // Emit real-time notification
+
+        if (!socketUserId || socketUserId === userId) return [];
+
+        const isSubscribed = subscriptions.some((sub) => sub.userId === socketUserId);
+        const isNotInRoom = !usersInRoom.has(socketUserId);
+
+        if (isSubscribed && isNotInRoom) {
           const notification: NotificationPayload = {
             type: 'NEW_MESSAGE',
-            roomId: message.roomId,
+            roomId,
             roomName: message.room?.name || '',
             content: message.content,
             fromUserId: message.userId,
@@ -206,35 +155,35 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             messageId: message.id,
             isRead: false,
           };
-  
-          console.log(`🚀 Emitting notification to user ${socketUserId}:`, notification);
+
           socket.emit('notification', notification);
+
+          return [{
+            userId: socketUserId,
+            roomId,
+            type: 'NEW_MESSAGE',
+            messageId: message.id,
+          }];
         }
-      }
-  
-      if (notificationsToCreate.length > 0) {
-        await this.prisma.notification.createMany({
-          data: notificationsToCreate,
-        });
-        console.log(`📝 Notifications saved for ${notificationsToCreate.length} users`);
+
+        return [];
+      });
+
+      if (notificationData.length > 0) {
+        await this.prisma.notification.createMany({ data: notificationData });
+        console.log(`📝 Notifications saved for ${notificationData.length} users`);
       }
     } catch (error) {
       console.error('🔥 Error in handleSendMessage:', error);
-      client.emit('error', {
-        message: 'Server error while sending message',
-      });
+      client.emit('error', { message: 'Server error while sending message' });
     }
   }
-  
 
   private broadcastRoomUsers(roomId: string) {
     const users = Array.from(this.roomUsers.get(roomId)?.values() || []);
     this.server.to(roomId).emit('room_users_updated', {
       roomId,
-      users: users.map(({ userId, username }) => ({
-        id: userId,
-        username,
-      })),
+      users: users.map(({ userId, username }) => ({ id: userId, username })),
       count: users.length,
     });
   }
