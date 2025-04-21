@@ -59,9 +59,7 @@ export class AuthService {
 
   async refreshToken(req: Request) {
     const refreshToken = req.cookies['refresh_token'];
-    console.log('ref token:', refreshToken);
-    console.log('calling rferesh');
-    if (!refreshToken) throw new ForbiddenException('No token');
+    if (!refreshToken) throw new ForbiddenException('Không có token refresh');
 
     try {
       const payload = await this.jwt.verifyAsync(refreshToken, {
@@ -73,7 +71,7 @@ export class AuthService {
       return this.getTokens(user);
     } catch (error) {
       console.error('Refresh token error:', error.message);
-      throw new ForbiddenException('Invalid token');
+      throw new ForbiddenException('Token không hợp lệ');
     }
   }
 }

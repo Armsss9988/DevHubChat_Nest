@@ -59,11 +59,8 @@ export class RoomController {
   async join(@Request() req, @Param('id') id: string, @Body() { password }) {
     const userId = req.user.id;
     const roomId = id;
-    console.log(userId);
-    console.log(roomId);
-    console.log(password);
     await this.roomService.joinRoom(roomId, userId, password);
-    return { message: 'Joined room successfully' };
+    return { message: 'Vào room thành công' };
   }
 
   @UseGuards(AuthGuard)

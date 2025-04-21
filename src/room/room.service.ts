@@ -66,7 +66,7 @@ export class RoomService {
   ): Promise<void> {
     const room = await this.prisma.room.findUnique({ where: { id: roomId } });
     if (!room) {
-      throw new NotFoundException(`Room with ID ${roomId} not found`);
+      throw new NotFoundException(`Không thấy phòng với id ${roomId}`);
     }
     if (room.password) {
       const existingJoin = await this.prisma.userRoomJoin.findFirst({
@@ -74,11 +74,11 @@ export class RoomService {
       });
       if (!existingJoin) {
         if (!password) {
-          throw new ForbiddenException('Password required');
+          throw new ForbiddenException('Cần mật khẩu');
         }
         const isPasswordValid = await bcrypt.compare(password, room.password);
         if (!isPasswordValid) {
-          throw new ForbiddenException('Incorrect password');
+          throw new ForbiddenException('Mật khẩu không đúng');
         }
         await this.prisma.userRoomJoin.create({
           data: {
@@ -100,7 +100,7 @@ export class RoomService {
       include: { creator: { select: { id: true, username: true } } },
     });
     if (!room) {
-      throw new NotFoundException(`Room with ID ${roomId} not found`);
+      throw new NotFoundException(`Không thấy phòng với id: ${roomId} `);
     }
     if (room.creatorId === userId || role === Role.ADMIN) {
       return room;
