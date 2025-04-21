@@ -136,9 +136,6 @@ export class RoomService {
     })[];
     total: number;
   }> {
-    const take = Number(pageSize);
-    const skip = (Number(page) - 1) * take;
-
     const where: Prisma.RoomWhereInput = name
       ? { name: { contains: name, mode: Prisma.QueryMode.insensitive } }
       : {};
@@ -147,32 +144,17 @@ export class RoomService {
       where.creatorId = userId;
     }
 
-    const [rooms, total] = await this.prisma.$transaction([
-      this.prisma.room.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { name: 'asc' },
-        include: {
-          creator: { select: { id: true, username: true } },
-          _count: { select: { subscriptions: true } },
-        },
-      }),
-      this.prisma.room.count({ where }),
-    ]);
+    // Query ALL room ids (filtered by name, owner, etc.)
+    const allRooms = await this.prisma.room.findMany({
+      where,
+      orderBy: { name: 'asc' },
+      include: {
+        creator: { select: { id: true, username: true } },
+        _count: { select: { subscriptions: true } },
+      },
+    });
 
-    if (role === Role.ADMIN) {
-      return {
-        rooms: rooms.map(({ _count, ...room }) => ({
-          ...room,
-          subCount: _count.subscriptions,
-          unreadCount: 0,
-        })),
-        total,
-      };
-    }
-
-    const currentRoomIds = rooms.map((r) => r.id);
+    const currentRoomIds = allRooms.map((r) => r.id);
 
     const [subscriptions, joinedRooms, rawUnreadGrouped] =
       await this.prisma.$transaction([
@@ -191,9 +173,7 @@ export class RoomService {
             roomId: { in: currentRoomIds },
             isRead: false,
           },
-          orderBy: {
-            roomId: 'asc',
-          },
+          orderBy: { roomId: 'asc' },
           _count: { id: true },
         }),
       ]);
@@ -201,13 +181,14 @@ export class RoomService {
       roomId: string;
       _count: { id: number };
     }[];
-    const subscribedRoomIds = new Set(subscriptions.map((s) => s.roomId));
-    const joinedRoomIds = new Set(joinedRooms.map((j) => j.roomId));
     const unreadMap = new Map(
       unreadGrouped.map((g) => [g.roomId, g._count?.id ?? 0]),
     );
+    const subscribedRoomIds = new Set(subscriptions.map((s) => s.roomId));
+    const joinedRoomIds = new Set(joinedRooms.map((j) => j.roomId));
 
-    const mapped = rooms
+    // Mapping + lọc isSub
+    const mapped = allRooms
       .map(({ password, _count, ...room }) => {
         const isSubscribed = subscribedRoomIds.has(room.id);
         const isJoined = joinedRoomIds.has(room.id);
@@ -222,16 +203,19 @@ export class RoomService {
         };
       })
       .filter((room) => {
-        if (isSub === true && !room.isSub) return false;
+        if (isSub && !room.isSub) return false;
         return true;
       });
 
+    const total = mapped.length;
+
+    const paginatedRooms = mapped.slice((page - 1) * pageSize, page * pageSize);
+
     return {
-      rooms: mapped,
-      total: mapped.length,
+      rooms: paginatedRooms,
+      total,
     };
   }
-
   async findByCode(
     code: string,
     userId: string,
