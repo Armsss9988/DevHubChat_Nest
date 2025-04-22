@@ -51,7 +51,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {}
 
   async handleConnection(client: Socket) {
-    const { userId, username } = client.handshake.query as Record<string, string>;
+    const { userId, username } = client.handshake.query as Record<
+      string,
+      string
+    >;
 
     if (!userId || !username) {
       console.error('⛔ Missing userId or username in handshake');
@@ -69,7 +72,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     for (const [roomId, users] of this.roomUsers.entries()) {
       if (users.delete(userId)) {
         client.leave(roomId);
-        users.size ? this.broadcastRoomUsers(roomId) : this.roomUsers.delete(roomId);
+        users.size
+          ? this.broadcastRoomUsers(roomId)
+          : this.roomUsers.delete(roomId);
         console.log(`❌ User ${userId} disconnected from room ${roomId}`);
       }
     }
@@ -80,7 +85,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const { userId, username } = client.data;
 
     if (!roomId || !userId || !username) {
-      console.warn('⚠️ Missing data to join room:', { roomId, userId, username });
+      console.warn('⚠️ Missing data to join room:', {
+        roomId,
+        userId,
+        username,
+      });
       return;
     }
 
@@ -103,7 +112,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const usersInRoom = this.roomUsers.get(roomId);
     if (usersInRoom?.delete(userId)) {
       client.leave(roomId);
-      usersInRoom.size ? this.broadcastRoomUsers(roomId) : this.roomUsers.delete(roomId);
+      usersInRoom.size
+        ? this.broadcastRoomUsers(roomId)
+        : this.roomUsers.delete(roomId);
       console.log(`📤 User ${userId} left room ${roomId}`);
     }
   }
@@ -133,14 +144,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }),
         this.server.fetchSockets(),
       ]);
-
+      const notiData = subscriptions.map((sub) => ({
+        userId: sub.userId,
+        roomId: roomId,
+        type: 'NEW_MESSAGE',
+        messageId: message.id,
+      }));
+      if (notiData.length > 0) {
+        await this.prisma.notification.createMany({ data: notiData });
+        console.log(`📝 Notifications saved for ${notiData.length} users`);
+      }
       const usersInRoom = this.roomUsers.get(roomId) ?? new Map();
-      const notificationData = sockets.flatMap((socket) => {
+      sockets.map((socket) => {
         const socketUserId = socket.data?.userId;
 
         if (!socketUserId || socketUserId === userId) return [];
 
-        const isSubscribed = subscriptions.some((sub) => sub.userId === socketUserId);
+        const isSubscribed = subscriptions.some(
+          (sub) => sub.userId === socketUserId,
+        );
         const isNotInRoom = !usersInRoom.has(socketUserId);
 
         if (isSubscribed && isNotInRoom) {
@@ -155,24 +177,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             messageId: message.id,
             isRead: false,
           };
-
           socket.emit('notification', notification);
-
-          return [{
-            userId: socketUserId,
-            roomId,
-            type: 'NEW_MESSAGE',
-            messageId: message.id,
-          }];
         }
-
-        return [];
       });
-
-      if (notificationData.length > 0) {
-        await this.prisma.notification.createMany({ data: notificationData });
-        console.log(`📝 Notifications saved for ${notificationData.length} users`);
-      }
     } catch (error) {
       console.error('🔥 Error in handleSendMessage:', error);
       client.emit('error', { message: 'Server error while sending message' });
