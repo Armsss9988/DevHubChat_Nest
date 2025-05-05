@@ -70,7 +70,7 @@ model Media {
   type       String    
   createdAt  DateTime  @default(now())
   message    Message   @relation(fields: [messageId], references: [id])
-  name       String
+  name       String    @default("Unknown")
   @@index([messageId])
 }
 

@@ -153,7 +153,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       const [subscriptions, sockets] = await Promise.all([
         this.prisma.roomSubscription.findMany({
-          where: { roomId },
+          where: { roomId, NOT: { userId } },
           select: { userId: true },
         }),
         this.server.fetchSockets(),
