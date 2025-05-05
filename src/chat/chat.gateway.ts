@@ -13,6 +13,11 @@ interface MessagePayload {
   content: string;
   userId: string;
   roomId: string;
+  files?: {
+    buffer: Buffer;
+    mimetype: string;
+    originalname: string;
+  }[];
 }
 
 interface ConnectedUser {
@@ -122,17 +127,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('send_message')
   async handleSendMessage(client: Socket, payload: MessagePayload) {
     try {
-      const { content, userId, roomId } = payload;
+      console.warn(
+        'Payload file:',
+        JSON.stringify(payload.files ? payload?.files[0]?.mimetype || '' : ''),
+      );
+      const { content, userId, roomId, files } = payload;
 
-      if (!content || !userId || !roomId) {
-        console.error('❌ Invalid message payload', payload);
-        return client.emit('error', { message: 'Invalid message payload' });
+      if ((!content && !files) || !userId || !roomId) {
+        return client.emit('error', {
+          message: 'Thiếu nội dung hoặc thông tin gửi',
+        });
       }
 
-      const message = await this.prisma.message.create({
-        data: { content, userId, roomId },
-        include: { user: true, room: true },
-      });
+      const message = await this.messageService.create(
+        {
+          content,
+          userId,
+          roomId,
+        },
+        files,
+      );
 
       this.server.to(roomId).emit('receive_message', message);
       console.log(`📡 Message broadcasted to room ${roomId}`);
@@ -148,7 +162,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         userId: sub.userId,
         roomId: roomId,
         type: 'NEW_MESSAGE',
-        messageId: message.id,
+        messageId: message!.id,
       }));
       if (notiData.length > 0) {
         await this.prisma.notification.createMany({ data: notiData });
@@ -169,12 +183,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           const notification: NotificationPayload = {
             type: 'NEW_MESSAGE',
             roomId,
-            roomName: message.room?.name || '',
-            content: message.content,
-            fromUserId: message.userId,
-            fromUsername: message.user?.username || '',
-            createdAt: message.createdAt.toISOString(),
-            messageId: message.id,
+            roomName: message?.room.name || '',
+            content: message?.content || '',
+            fromUserId: message!.userId,
+            fromUsername: message!.user?.username || '',
+            createdAt: message!.createdAt.toISOString(),
+            messageId: message!.id,
             isRead: false,
           };
           socket.emit('notification', notification);

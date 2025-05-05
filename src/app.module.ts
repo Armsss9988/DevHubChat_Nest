@@ -9,9 +9,13 @@ import { MessageModule } from './message/message.module';
 import { ChatGateway } from './chat/chat.gateway';
 import { SubscribeModule } from './subscribe/subscribe.module';
 import { NotificationModule } from './notification/notification.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true, // cho phép dùng ở mọi nơi không cần import lại
+    }),
     PrismaModule,
     AuthModule,
     UserModule,
