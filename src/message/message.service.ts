@@ -54,8 +54,18 @@ export class MessageService {
     }
     return this.prisma.message.findUnique({
       where: { id: message.id },
-      include: {
-        media: true,
+      select: {
+        id: true,
+        content: true,
+        createdAt: true,
+        media: {
+          select: {
+            id: true,
+            url: true,
+            type: true,
+            name: true,
+          },
+        },
         user: {
           select: {
             username: true,
@@ -92,7 +102,7 @@ export class MessageService {
     });
   }
   async getChatHistory(roomId: string, lastMessageId?: string) {
-    const take = 20; 
+    const take = 20;
 
     const cursor = lastMessageId ? { id: lastMessageId } : undefined;
 
@@ -100,7 +110,7 @@ export class MessageService {
       where: { roomId },
       orderBy: { createdAt: 'desc' },
       take,
-      skip: cursor ? 1 : 0, 
+      skip: cursor ? 1 : 0,
       cursor,
       include: {
         user: {
@@ -113,6 +123,6 @@ export class MessageService {
       },
     });
 
-    return messages.reverse(); 
+    return messages.reverse();
   }
 }

@@ -17,8 +17,8 @@ export class AuthGuard implements CanActivate {
       request.cookies['access_token'] ||
       request.headers.authorization?.split(' ')[1];
 
-    if (!token) {      
-      throw new UnauthorizedException('Token không tồn tại');
+    if (!token) {
+      return false; // No token provided
     }
 
     try {

@@ -185,7 +185,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             roomId,
             roomName: message?.room.name || '',
             content: message?.content || '',
-            fromUserId: message!.userId,
+            fromUserId: message!.user.id,
             fromUsername: message!.user?.username || '',
             createdAt: message!.createdAt.toISOString(),
             messageId: message!.id,
@@ -195,7 +195,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
       });
     } catch (error) {
-      console.error('🔥 Error in handleSendMessage:', error);
+      console.error('🔥 Error in handleSendMessage:', error?.message || error);
       client.emit('error', { message: 'Server error while sending message' });
     }
   }

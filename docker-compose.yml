@@ -1,0 +1,29 @@
+services:
+    db:
+      image: postgres:15
+      restart: always
+      environment:
+        POSTGRES_USER: devhubuser
+        POSTGRES_PASSWORD: 123456
+        POSTGRES_DB: devhub
+      ports:
+        - '5432:5432'
+      volumes:
+        - postgres_data:/var/lib/postgresql/data
+    backend:
+      build:
+        context: .
+        dockerfile: Dockerfile
+      restart: always
+      ports:
+        - '5000:5000'
+      environment:
+        DATABASE_URL: postgres://devhubuser:123456@db:5432/devhub
+        NODE_ENV: production
+      env_file:
+        - .env
+      command: sh -c "npx prisma migrate deploy && npm run start:dev"
+      depends_on:
+            - db
+volumes:
+  postgres_data:
