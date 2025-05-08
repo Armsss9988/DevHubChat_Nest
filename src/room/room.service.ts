@@ -27,6 +27,18 @@ export class RoomService {
       },
     });
   }
+  async update(id: string, createRoomDto: CreateRoomDto): Promise<Room> {
+    return this.prisma.room.update({
+      where: { id },
+      data: {
+        name: createRoomDto.name,
+        description: createRoomDto.description,
+        password: createRoomDto.password
+          ? await bcrypt.hash(createRoomDto.password, 10)
+          : undefined,
+      },
+    });
+  }
 
   async remove(userId: string, role: string, id: string): Promise<Room> {
     const room = await this.prisma.room.findUnique({ where: { id } });

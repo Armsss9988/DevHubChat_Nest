@@ -41,7 +41,7 @@ model Room {
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   creatorId     String             @db.Uuid
-  creator       User               @relation("CreatedRooms", fields: [creatorId], references: [id])
+  creator       User               @relation("CreatedRooms", fields: [creatorId], references: [id], onDelete: Cascade)
   messages      Message[]
   subscriptions RoomSubscription[]
   notifications Notification[]
@@ -54,8 +54,8 @@ model Message {
   roomId       String         @db.Uuid
   userId       String         @db.Uuid
   createdAt    DateTime       @default(now())
-  room         Room           @relation(fields: [roomId], references: [id])
-  user         User           @relation(fields: [userId], references: [id])
+  room         Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   Notification Notification[]
   media        Media[]        // 👈 Message có thể có nhiều media
 
@@ -69,7 +69,7 @@ model Media {
   url        String    
   type       String    
   createdAt  DateTime  @default(now())
-  message    Message   @relation(fields: [messageId], references: [id])
+  message    Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
   name       String    @default("Unknown")
   @@index([messageId])
 }
@@ -79,8 +79,8 @@ model UserRoomJoin {
   id       String   @id @default(uuid()) @db.Uuid
   userId   String   @db.Uuid
   roomId   String   @db.Uuid
-  user     User     @relation("UserRoomJoins", fields: [userId], references: [id])
-  room     Room     @relation("UserRoomJoins", fields: [roomId], references: [id])
+  user     User     @relation("UserRoomJoins", fields: [userId], references: [id], onDelete: Cascade)
+  room     Room     @relation("UserRoomJoins", fields: [roomId], references: [id], onDelete: Cascade)
   joinedAt DateTime @default(now())
 
   @@index([userId, roomId])
@@ -92,8 +92,8 @@ model RoomSubscription {
   roomId       String   @db.Uuid
   userId       String   @db.Uuid
   subscribedAt DateTime @default(now())
-  room         Room     @relation(fields: [roomId], references: [id])
-  user         User     @relation(fields: [userId], references: [id])
+  room         Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, userId])
   @@index([roomId])
@@ -110,9 +110,9 @@ model Notification {
   isRead    Boolean   @default(false)
   createdAt DateTime  @default(now())
   expiresAt DateTime?
-  user      User      @relation(fields: [userId], references: [id])
-  room      Room      @relation(fields: [roomId], references: [id])
-  message   Message   @relation(fields: [messageId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room      Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  message   Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([roomId])

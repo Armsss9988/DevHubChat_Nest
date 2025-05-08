@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -10,11 +10,11 @@ import { ChatGateway } from './chat/chat.gateway';
 import { SubscribeModule } from './subscribe/subscribe.module';
 import { NotificationModule } from './notification/notification.module';
 import { ConfigModule } from '@nestjs/config';
-
+import { LoggerMiddleware } from './middleware/logger.middleware';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      isGlobal: true, // cho phép dùng ở mọi nơi không cần import lại
+      isGlobal: true, 
     }),
     PrismaModule,
     AuthModule,
@@ -27,4 +27,8 @@ import { ConfigModule } from '@nestjs/config';
   controllers: [AppController],
   providers: [AppService, ChatGateway],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggerMiddleware).forRoutes('*'); 
+  }
+}

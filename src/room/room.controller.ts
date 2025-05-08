@@ -8,11 +8,16 @@ import {
   Query,
   UseGuards,
   Request,
+  Put,
+  Patch,
 } from '@nestjs/common';
 import { RoomService } from './room.service';
 import { MessageService } from '../message/message.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { AuthGuard } from '../auth/guards/auth.guard';
+import { UpdateRoomDto } from './dto/update-room.dto';
+import { OwnerGuard } from '../auth/guards/owner.guard';
+import { IsOwner } from '../auth/decorator/is-owner.decorator';
 
 @Controller('rooms')
 export class RoomController {
@@ -26,6 +31,16 @@ export class RoomController {
   async create(@Request() req, @Body() createRoomDto: CreateRoomDto) {
     const userId = req.user.id;
     return this.roomService.create(userId, createRoomDto);
+  }
+  @UseGuards(AuthGuard, OwnerGuard)
+  @IsOwner({ model: 'room', idParam: 'id', ownerField: 'creatorId' })
+  @Patch(':id')
+  async update(
+    @Request() req,
+    @Body() updateRoomDto: UpdateRoomDto,
+    @Param('id') id: string,
+  ) {
+    return this.roomService.update(id, updateRoomDto);
   }
   // @UseGuards(AuthGuard)
   // @Get('subscribed')
@@ -77,7 +92,7 @@ export class RoomController {
     @Query('name') name?: string,
     @Query('page') page: number = 1,
     @Query('pageSize') pageSize: number = 10,
-    @Query('isSub') isSub?: string, 
+    @Query('isSub') isSub?: string,
     @Query('owner') owner?: string,
   ) {
     const { id, role } = req.user;
