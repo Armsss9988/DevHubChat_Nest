@@ -45,7 +45,7 @@ export class MessageService {
           url: result.secure_url,
           type: file.mimetype,
           messageId: message.id,
-          name: file.originalname,
+          name: file.originalname || 'Unknown',
         };
       });
 
